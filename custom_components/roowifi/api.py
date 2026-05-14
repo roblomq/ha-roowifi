@@ -303,8 +303,35 @@ class RoowifiClient:
     async def async_motors(self, side: bool = False, vacuum: bool = False, main: bool = False) -> None:
         """Set cleaning motor states via TCP (MOTORS opcode 138).
 
+        MOTORS only works in Safe/Full mode, so we switch modes first,
+        then return to Passive mode so HTTP CGI commands keep working.
         Bitmask: bit0 = side brush, bit1 = vacuum, bit2 = main brush.
-        Opcode 128 at the end returns to Passive mode so HTTP CGI works again.
         """
         bitmask = (0x01 if side else 0) | (0x02 if vacuum else 0) | (0x04 if main else 0)
-        await self._tcp_send(bytes([138, bitmask]), bytes([128]))
+
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, 9001),
+                timeout=3.0,
+            )
+        except (OSError, asyncio.TimeoutError) as err:
+            raise CannotConnect(f"TCP gateway unreachable: {err}") from err
+
+        try:
+            writer.write(bytes([128]))              # Passive mode (wake)
+            await writer.drain()
+            await asyncio.sleep(0.4)
+            writer.write(bytes([131]))              # Safe mode
+            await writer.drain()
+            await asyncio.sleep(0.2)
+            writer.write(bytes([138, bitmask]))     # Set motors
+            await writer.drain()
+            await asyncio.sleep(0.1)
+            writer.write(bytes([128]))              # Return to Passive so HTTP CGI works
+            await writer.drain()
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass

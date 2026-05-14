@@ -20,8 +20,8 @@ _LOGGER = logging.getLogger(__name__)
 _SPEED     = 200    # mm/s — forward/backward
 _SPIN_SPD  = 150    # mm/s — spin-in-place
 _STRAIGHT  = 32768  # special OI radius value for straight line
-_SPIN_L    = -1     # counter-clockwise
-_SPIN_R    = 1      # clockwise
+_SPIN_L    = 1      # counter-clockwise (OI spec: radius +1 = left)
+_SPIN_R    = -1     # clockwise         (OI spec: radius -1 = right)
 _MOVE_TIME = 0.8    # seconds per forward/backward press
 _SPIN_TIME = 0.6    # seconds per spin press (~90° at _SPIN_SPD mm/s)
 
