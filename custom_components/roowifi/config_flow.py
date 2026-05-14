@@ -14,13 +14,17 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_USERNAME, default="admin"): str,
-        vol.Required(CONF_PASSWORD, default="roombawifi"): str,
-    }
-)
+
+def _schema(defaults: dict | None = None) -> vol.Schema:
+    """Return the user step schema, optionally pre-filled with previous input."""
+    d = defaults or {}
+    return vol.Schema(
+        {
+            vol.Required(CONF_HOST, default=d.get(CONF_HOST, "")): str,
+            vol.Required(CONF_USERNAME, default=d.get(CONF_USERNAME, "admin")): str,
+            vol.Required(CONF_PASSWORD, default=d.get(CONF_PASSWORD, "roombawifi")): str,
+        }
+    )
 
 
 class RoowifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -56,8 +60,10 @@ class RoowifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data=user_input,
                 )
 
+        # Re-show the form with previous input pre-filled so the user
+        # does not have to retype everything after a connection error.
         return self.async_show_form(
             step_id="user",
-            data_schema=STEP_USER_SCHEMA,
+            data_schema=_schema(user_input),
             errors=errors,
         )
