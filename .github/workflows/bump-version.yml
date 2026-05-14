@@ -6,6 +6,7 @@ on:
     paths-ignore:
       # Prevent loop: don't re-trigger when only manifest.json changed
       - "custom_components/roowifi/manifest.json"
+  workflow_dispatch:
 
 permissions:
   contents: write
