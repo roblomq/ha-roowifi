@@ -27,7 +27,6 @@ _FEATURES = (
     | VacuumEntityFeature.STOP
     | VacuumEntityFeature.RETURN_HOME
     | VacuumEntityFeature.CLEAN_SPOT
-    | VacuumEntityFeature.BATTERY
     | VacuumEntityFeature.STATE
 )
 
@@ -68,15 +67,6 @@ class RoowifiVacuum(CoordinatorEntity[RoowifiDataUpdateCoordinator], StateVacuum
             # Any non-zero charging state means the robot is on the dock
             return _STATE_DOCKED
         return self._internal_state
-
-    @property
-    def battery_level(self) -> int | None:
-        data = self.coordinator.data or {}
-        charge = _val(data, "r18")
-        capacity = _val(data, "r19")
-        if capacity > 0:
-            return min(100, round(charge / capacity * 100))
-        return None
 
     async def _send(self, new_state: str, coro) -> None:
         prev = self._internal_state
