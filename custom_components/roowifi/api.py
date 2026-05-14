@@ -15,6 +15,9 @@ _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = aiohttp.ClientTimeout(total=8)
 _CMD_TIMEOUT = aiohttp.ClientTimeout(total=5)
 
+# Headers that improve compatibility with old embedded HTTP servers
+_HEADERS = {"Connection": "close", "Accept": "*/*"}
+
 
 class CannotConnect(Exception):
     """Raised when the RooWifi module is unreachable."""
@@ -27,9 +30,10 @@ class InvalidAuth(Exception):
 class RoowifiClient:
     """Async HTTP client for the RooWifi module.
 
-    Handles both HTTP Basic and HTTP Digest authentication transparently
-    by sending an unauthenticated probe first and responding to the
-    WWW-Authenticate challenge the server returns.
+    Sensor data is read via /roomba.json.
+    Commands use /roomba.cgi?button=X (same endpoint as the built-in web UI).
+    Raw opcodes can still be sent via async_send_opcode() if needed.
+    Auth type (Basic vs Digest) is detected on the first request and cached.
     """
 
     def __init__(
@@ -44,6 +48,8 @@ class RoowifiClient:
         self._password = password
         self._session = session
         self._basic_auth = aiohttp.BasicAuth(username, password)
+        # Cached after first successful auth probe: "basic", "digest", or None
+        self._auth_type: str | None = None
 
     # ------------------------------------------------------------------
     # Auth helpers
@@ -82,40 +88,65 @@ class RoowifiClient:
         )
 
     # ------------------------------------------------------------------
-    # Low-level fetch (challenge-response cycle)
+    # Low-level fetch — single request with known or probed auth
     # ------------------------------------------------------------------
 
-    async def _get_text(
-        self, path: str, params: dict | None = None, timeout: aiohttp.ClientTimeout = _TIMEOUT
+    async def _get(
+        self,
+        path: str,
+        params: dict | None = None,
+        timeout: aiohttp.ClientTimeout = _TIMEOUT,
     ) -> str:
-        """GET a URL, handling Basic or Digest auth via challenge-response."""
+        """GET a URL and return the response text.
+
+        On the first call the auth type is detected via challenge-response
+        and cached. Subsequent calls skip the probe for Basic auth.
+        """
         url = self._base + path
         path_qs = path + ("?" + urlencode(params) if params else "")
+        headers = dict(_HEADERS)
 
         try:
-            # Probe without auth so the server can send its challenge
-            async with self._session.get(url, params=params, timeout=timeout) as r:
+            # If we already know it's Basic, send auth directly — no probe needed.
+            if self._auth_type == "basic":
+                async with self._session.get(
+                    url, params=params, auth=self._basic_auth,
+                    headers=headers, timeout=timeout,
+                ) as r:
+                    if r.status == 401:
+                        raise InvalidAuth
+                    r.raise_for_status()
+                    return await r.text()
+
+            # Probe without auth to receive the server's challenge.
+            async with self._session.get(
+                url, params=params, headers=headers, timeout=timeout
+            ) as r:
                 if r.status == 200:
+                    # No authentication required on this endpoint.
                     return await r.text()
                 if r.status != 401:
                     r.raise_for_status()
                 www_auth = r.headers.get("WWW-Authenticate", "")
 
-            # Respond to the challenge
+            # Respond to the challenge.
             if www_auth.lower().startswith("digest"):
+                self._auth_type = "digest"
                 auth_header = self._build_digest_header("GET", path_qs, www_auth)
-                headers = {"Authorization": auth_header}
                 async with self._session.get(
-                    url, params=params, headers=headers, timeout=timeout
+                    url, params=params,
+                    headers={**headers, "Authorization": auth_header},
+                    timeout=timeout,
                 ) as r2:
                     if r2.status == 401:
                         raise InvalidAuth
                     r2.raise_for_status()
                     return await r2.text()
             else:
-                # Basic auth
+                self._auth_type = "basic"
                 async with self._session.get(
-                    url, params=params, auth=self._basic_auth, timeout=timeout
+                    url, params=params, auth=self._basic_auth,
+                    headers=headers, timeout=timeout,
                 ) as r2:
                     if r2.status == 401:
                         raise InvalidAuth
@@ -127,79 +158,62 @@ class RoowifiClient:
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise CannotConnect(str(err)) from err
 
-    async def _get_json(self, path: str) -> dict:
-        url = self._base + path
-
-        try:
-            async with self._session.get(url, timeout=_TIMEOUT) as r:
-                if r.status == 200:
-                    return await r.json(content_type=None)
-                if r.status != 401:
-                    r.raise_for_status()
-                www_auth = r.headers.get("WWW-Authenticate", "")
-
-            if www_auth.lower().startswith("digest"):
-                auth_header = self._build_digest_header("GET", path, www_auth)
-                headers = {"Authorization": auth_header}
-                async with self._session.get(url, headers=headers, timeout=_TIMEOUT) as r2:
-                    if r2.status == 401:
-                        raise InvalidAuth
-                    r2.raise_for_status()
-                    return await r2.json(content_type=None)
-            else:
-                async with self._session.get(url, auth=self._basic_auth, timeout=_TIMEOUT) as r2:
-                    if r2.status == 401:
-                        raise InvalidAuth
-                    r2.raise_for_status()
-                    return await r2.json(content_type=None)
-
-        except (InvalidAuth, CannotConnect):
-            raise
-        except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as err:
-            raise CannotConnect(str(err)) from err
-
     # ------------------------------------------------------------------
-    # Public API
+    # Public API — sensors
     # ------------------------------------------------------------------
 
     async def async_get_sensors(self) -> dict:
         """Return the raw rX sensor dict from /roomba.json."""
-        data = await self._get_json("/roomba.json")
-        return data["response"]
-
-    async def async_send_opcode(self, opcode: int) -> str:
-        """Send a single OI opcode via /rwr.cgi?exec=<opcode>."""
-        return await self._get_text("/rwr.cgi", params={"exec": opcode}, timeout=_CMD_TIMEOUT)
+        try:
+            text = await self._get("/roomba.json")
+            import json
+            data = json.loads(text)
+            return data["response"]
+        except (KeyError, ValueError) as err:
+            raise CannotConnect(f"Unexpected response from /roomba.json: {err}") from err
 
     # ------------------------------------------------------------------
-    # Composed command sequences
+    # Public API — commands via /roomba.cgi?button=X
+    #
+    # This is the same endpoint the built-in web UI uses: more reliable
+    # than raw opcodes because it mirrors a physical button press and
+    # works regardless of the current OI mode.
     # ------------------------------------------------------------------
 
-    async def _wake(self) -> None:
-        await self.async_send_opcode(128)
-        await asyncio.sleep(1)
-
-    async def _wake_and_safe(self) -> None:
-        await self.async_send_opcode(128)
-        await asyncio.sleep(1)
-        await self.async_send_opcode(131)
-        await asyncio.sleep(1)
+    async def _button(self, button: str) -> None:
+        """Send a button command via /roomba.cgi?button=<button>."""
+        result = await self._get(
+            "/roomba.cgi", params={"button": button}, timeout=_CMD_TIMEOUT
+        )
+        if result.strip() == "0":
+            _LOGGER.warning(
+                "RooWifi button '%s' returned 0 — command may not have executed "
+                "(check that no TCP client is connected on port 9001)",
+                button,
+            )
 
     async def async_start_clean(self) -> None:
-        await self._wake_and_safe()
-        await self.async_send_opcode(135)
+        await self._button("CLEAN")
 
     async def async_clean_spot(self) -> None:
-        await self._wake_and_safe()
-        await self.async_send_opcode(136)
+        await self._button("SPOT")
 
     async def async_dock(self) -> None:
-        await self._wake()
-        await self.async_send_opcode(143)
+        await self._button("DOCK")
 
     async def async_stop(self) -> None:
-        """Toggle pause/stop by sending Clean opcode once."""
-        await self.async_send_opcode(135)
+        """Press CLEAN again to pause/stop (toggles on Roomba 600 series)."""
+        await self._button("CLEAN")
+
+    # ------------------------------------------------------------------
+    # Public API — raw opcodes via /rwr.cgi (advanced / future use)
+    # ------------------------------------------------------------------
+
+    async def async_send_opcode(self, opcode: int) -> str:
+        """Send a raw OI opcode via /rwr.cgi?exec=<opcode>. Returns '1' on success."""
+        return await self._get(
+            "/rwr.cgi", params={"exec": opcode}, timeout=_CMD_TIMEOUT
+        )
 
     async def async_wake(self) -> None:
         await self.async_send_opcode(128)
