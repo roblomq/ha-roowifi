@@ -328,11 +328,12 @@ class RoowifiClient:
             writer.write(bytes([128]))              # Passive mode (wake)
             await writer.drain()
             await asyncio.sleep(0.4)
-            writer.write(bytes([131]))              # Safe mode
+            writer.write(bytes([132]))              # Full mode (no safety checks blocking motors)
             await writer.drain()
             await asyncio.sleep(0.2)
-            writer.write(bytes([138, bitmask]))     # Motors ON — stay in Safe mode
+            writer.write(bytes([138, bitmask]))     # Motors ON — stay in Full mode
             await writer.drain()
+            await asyncio.sleep(0.2)               # Let Roomba process before closing
         finally:
             writer.close()
             try:
