@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbind RooWifi",
+        "description": "Voer de verbindingsgegevens in van je RooWifi-module. Standaard: admin / roombawifi.",
+        "data": {
+          "host": "IP-adres of hostnaam",
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met de RooWifi-module. Controleer het IP-adres en zorg dat de module verbonden is met je netwerk.",
+      "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord.",
+      "unknown": "Er is een onverwachte fout opgetreden."
+    },
+    "abort": {
+      "already_configured": "Deze RooWifi-module is al geconfigureerd."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "charging_state": {
+        "name": "Laadstatus",
+        "state": {
+          "not_charging": "Ontladen",
+          "reconditioning": "Reconditioneren",
+          "full_charging": "Laden",
+          "trickle_charging": "Druppelladen",
+          "waiting": "Wachten",
+          "charging_fault": "Laadfout"
+        }
+      }
+    }
+  }
+}

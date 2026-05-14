@@ -84,8 +84,17 @@ SENSORS: tuple[RoowifiSensorDescription, ...] = (
     ),
     RoowifiSensorDescription(
         key="charging_state",
-        name="Charging State",
-        fn=lambda d: CHARGING_STATES.get(_val(d, "r14"), "unknown"),
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "not_charging",
+            "reconditioning",
+            "full_charging",
+            "trickle_charging",
+            "waiting",
+            "charging_fault",
+        ],
+        translation_key="charging_state",
+        fn=lambda d: CHARGING_STATES.get(_val(d, "r14")),
     ),
     RoowifiSensorDescription(
         key="distance",

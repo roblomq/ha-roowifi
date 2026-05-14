@@ -19,5 +19,20 @@
     "abort": {
       "already_configured": "This RooWifi module is already configured."
     }
+  },
+  "entity": {
+    "sensor": {
+      "charging_state": {
+        "name": "Charging state",
+        "state": {
+          "not_charging": "Not charging",
+          "reconditioning": "Reconditioning",
+          "full_charging": "Charging",
+          "trickle_charging": "Trickle charging",
+          "waiting": "Waiting",
+          "charging_fault": "Charging fault"
+        }
+      }
+    }
   }
 }
