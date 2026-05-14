@@ -187,13 +187,16 @@ class RoowifiClient:
             "/roomba.cgi", params={"button": button}, timeout=_CMD_TIMEOUT
         )
         if result.strip() == "0":
-            _LOGGER.warning(
-                "RooWifi button '%s' returned 0 — command may not have executed "
-                "(check that no TCP client is connected on port 9001)",
-                button,
+            raise CannotConnect(
+                f"RooWifi button '{button}' returned 0 — command not executed "
+                "(a TCP client may still be connected on port 9001)"
             )
 
     async def async_start_clean(self) -> None:
+        # Opcode 128 returns the Roomba to Passive mode (exits Safe/Full mode,
+        # wakes from sleep). Required before CLEAN works reliably from dock.
+        await self.async_send_opcode(128)
+        await asyncio.sleep(0.5)
         await self._button("CLEAN")
 
     async def async_clean_spot(self) -> None:

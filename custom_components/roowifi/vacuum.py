@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .api import CannotConnect
 from .const import DOMAIN
 from .coordinator import RoowifiDataUpdateCoordinator
 
@@ -77,32 +78,30 @@ class RoowifiVacuum(CoordinatorEntity[RoowifiDataUpdateCoordinator], StateVacuum
             return min(100, round(charge / capacity * 100))
         return None
 
-    async def async_start(self) -> None:
-        self._internal_state = _STATE_CLEANING
+    async def _send(self, new_state: str, coro) -> None:
+        prev = self._internal_state
+        self._internal_state = new_state
         self.async_write_ha_state()
-        await self.coordinator.client.async_start_clean()
+        try:
+            await coro
+        except CannotConnect as err:
+            _LOGGER.error("Roomba command failed: %s", err)
+            self._internal_state = prev
+            self.async_write_ha_state()
+            return
         await self.coordinator.async_refresh()
+
+    async def async_start(self) -> None:
+        await self._send(_STATE_CLEANING, self.coordinator.client.async_start_clean())
 
     async def async_pause(self) -> None:
-        self._internal_state = _STATE_PAUSED
-        self.async_write_ha_state()
-        await self.coordinator.client.async_stop()
-        await self.coordinator.async_refresh()
+        await self._send(_STATE_PAUSED, self.coordinator.client.async_stop())
 
     async def async_stop(self, **kwargs) -> None:
-        self._internal_state = _STATE_IDLE
-        self.async_write_ha_state()
-        await self.coordinator.client.async_stop()
-        await self.coordinator.async_refresh()
+        await self._send(_STATE_IDLE, self.coordinator.client.async_stop())
 
     async def async_return_to_base(self, **kwargs) -> None:
-        self._internal_state = _STATE_RETURNING
-        self.async_write_ha_state()
-        await self.coordinator.client.async_dock()
-        await self.coordinator.async_refresh()
+        await self._send(_STATE_RETURNING, self.coordinator.client.async_dock())
 
     async def async_clean_spot(self, **kwargs) -> None:
-        self._internal_state = _STATE_CLEANING
-        self.async_write_ha_state()
-        await self.coordinator.client.async_clean_spot()
-        await self.coordinator.async_refresh()
+        await self._send(_STATE_CLEANING, self.coordinator.client.async_clean_spot())
