@@ -215,5 +215,16 @@ class RoowifiClient:
             "/rwr.cgi", params={"exec": opcode}, timeout=_CMD_TIMEOUT
         )
 
+    async def async_send_opcode_with_params(self, opcode: int, extra: list[int]) -> str:
+        """Send an opcode with additional parameter bytes (p1, p2, ...).
+
+        Example: DRIVE (137) needs 4 extra bytes for velocity and radius.
+        Example: MOTORS (138) needs 1 extra byte for the motor bitmask.
+        """
+        params: dict = {"exec": opcode}
+        for i, byte in enumerate(extra, 1):
+            params[f"p{i}"] = byte
+        return await self._get("/rwr.cgi", params=params, timeout=_CMD_TIMEOUT)
+
     async def async_wake(self) -> None:
         await self.async_send_opcode(128)

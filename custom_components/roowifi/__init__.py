@@ -10,7 +10,7 @@ from .api import RoowifiClient
 from .const import DOMAIN
 from .coordinator import RoowifiDataUpdateCoordinator
 
-PLATFORMS = [Platform.VACUUM, Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.VACUUM, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
