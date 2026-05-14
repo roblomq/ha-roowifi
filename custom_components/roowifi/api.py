@@ -279,7 +279,7 @@ class RoowifiClient:
             raise CannotConnect(f"TCP gateway unreachable: {err}") from err
 
         try:
-            writer.write(bytes([128]))      # Wake
+            writer.write(bytes([128]))      # Wake → Passive mode
             await writer.drain()
             await asyncio.sleep(0.4)
             writer.write(bytes([131]))      # Safe mode
@@ -289,6 +289,9 @@ class RoowifiClient:
             await writer.drain()
             await asyncio.sleep(duration)
             writer.write(stop_cmd)          # Stop
+            await writer.drain()
+            await asyncio.sleep(0.1)
+            writer.write(bytes([128]))      # Back to Passive mode so HTTP CGI works again
             await writer.drain()
         finally:
             writer.close()
@@ -301,6 +304,7 @@ class RoowifiClient:
         """Set cleaning motor states via TCP (MOTORS opcode 138).
 
         Bitmask: bit0 = side brush, bit1 = vacuum, bit2 = main brush.
+        Opcode 128 at the end returns to Passive mode so HTTP CGI works again.
         """
         bitmask = (0x01 if side else 0) | (0x02 if vacuum else 0) | (0x04 if main else 0)
-        await self._tcp_send(bytes([138, bitmask]))
+        await self._tcp_send(bytes([138, bitmask]), bytes([128]))
