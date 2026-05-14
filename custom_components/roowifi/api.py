@@ -43,6 +43,7 @@ class RoowifiClient:
         password: str,
         session: aiohttp.ClientSession,
     ) -> None:
+        self._host = host
         self._base = f"http://{host}"
         self._username = username
         self._password = password
@@ -215,16 +216,88 @@ class RoowifiClient:
             "/rwr.cgi", params={"exec": opcode}, timeout=_CMD_TIMEOUT
         )
 
-    async def async_send_opcode_with_params(self, opcode: int, extra: list[int]) -> str:
-        """Send an opcode with additional parameter bytes (p1, p2, ...).
-
-        Example: DRIVE (137) needs 4 extra bytes for velocity and radius.
-        Example: MOTORS (138) needs 1 extra byte for the motor bitmask.
-        """
-        params: dict = {"exec": opcode}
-        for i, byte in enumerate(extra, 1):
-            params[f"p{i}"] = byte
-        return await self._get("/rwr.cgi", params=params, timeout=_CMD_TIMEOUT)
-
     async def async_wake(self) -> None:
         await self.async_send_opcode(128)
+
+    # ------------------------------------------------------------------
+    # TCP gateway (port 9001) — required for multi-byte opcodes
+    #
+    # The RooWifi CGI only supports single-byte opcodes. Commands that
+    # need parameter bytes (DRIVE=137, MOTORS=138) must go through the
+    # raw TCP gateway. The sensor refresh pauses while connected, so
+    # connections are kept as brief as possible.
+    # ------------------------------------------------------------------
+
+    async def _tcp_send(self, *packets: bytes) -> None:
+        """Open a TCP connection to port 9001, send packets, then close."""
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, 9001),
+                timeout=3.0,
+            )
+        except (OSError, asyncio.TimeoutError) as err:
+            raise CannotConnect(f"TCP gateway unreachable: {err}") from err
+
+        try:
+            for packet in packets:
+                writer.write(packet)
+                await writer.drain()
+                await asyncio.sleep(0.05)
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _s16(value: int) -> bytes:
+        """Encode a signed 16-bit integer as two big-endian bytes."""
+        u = value if value >= 0 else value + 65536
+        return bytes([(u >> 8) & 0xFF, u & 0xFF])
+
+    async def async_drive(self, velocity: int, radius: int, duration: float) -> None:
+        """Wake the Roomba, enter Safe mode, drive, then stop — all via TCP.
+
+        velocity: -500 to 500 mm/s (positive = forward)
+        radius:   -2000 to 2000 mm, or 32768 for straight, ±1 for spin in place
+        duration: seconds to drive before stopping
+        """
+        wake_safe = bytes([128]) + bytes([131])
+        drive_cmd = bytes([137]) + self._s16(velocity) + self._s16(radius)
+        stop_cmd  = bytes([137]) + self._s16(0) + self._s16(32768)
+
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, 9001),
+                timeout=3.0,
+            )
+        except (OSError, asyncio.TimeoutError) as err:
+            raise CannotConnect(f"TCP gateway unreachable: {err}") from err
+
+        try:
+            writer.write(bytes([128]))      # Wake
+            await writer.drain()
+            await asyncio.sleep(0.4)
+            writer.write(bytes([131]))      # Safe mode
+            await writer.drain()
+            await asyncio.sleep(0.2)
+            writer.write(drive_cmd)         # Drive
+            await writer.drain()
+            await asyncio.sleep(duration)
+            writer.write(stop_cmd)          # Stop
+            await writer.drain()
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    async def async_motors(self, side: bool = False, vacuum: bool = False, main: bool = False) -> None:
+        """Set cleaning motor states via TCP (MOTORS opcode 138).
+
+        Bitmask: bit0 = side brush, bit1 = vacuum, bit2 = main brush.
+        """
+        bitmask = (0x01 if side else 0) | (0x02 if vacuum else 0) | (0x04 if main else 0)
+        await self._tcp_send(bytes([138, bitmask]))
