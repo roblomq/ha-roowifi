@@ -1,57 +1,57 @@
 # RooWifi — Home Assistant Integration
 
-HACS custom integration voor de **RooWifi WiFi-module** (Carnlan Engineering, ~2013) om oudere iRobot Roomba's (500/600/700-serie) te bedienen via Home Assistant.
+HACS custom integration for the **RooWifi Wi-Fi module** (Carnlan Engineering, ~2013) to control older iRobot Roomba vacuums (500/600/700 series) via Home Assistant.
 
-## Hardware vereisten
+## Hardware requirements
 
-- iRobot Roomba 500/600/700-serie met mini-DIN 7-pin (PS/2) SCI-poort
-- [RooWifi module](http://www.roowifi.com/) verbonden via de SCI-poort
-- RooWifi verbonden met je thuisnetwerk (LED knippert elke 3 seconden)
+- iRobot Roomba 500/600/700 series with mini-DIN 7-pin (PS/2) SCI port
+- [RooWifi module](http://www.roowifi.com/) connected to the SCI port
+- RooWifi connected to your home network (LED blinks every 3 seconds)
 
-## Installatie via HACS
+## Installation via HACS
 
-1. Ga in Home Assistant naar **HACS → Integraties → ⋮ → Aangepaste opslagplaatsen**
-2. Voeg `https://github.com/roblomq/ha-roowifi` toe als categorie **Integratie**
-3. Zoek naar **RooWifi** en klik op **Downloaden**
-4. Herstart Home Assistant
+1. In Home Assistant, go to **HACS → Integrations → ⋮ → Custom repositories**
+2. Add `https://github.com/roblomq/ha-roowifi` as category **Integration**
+3. Search for **RooWifi** and click **Download**
+4. Restart Home Assistant
 
-## Configuratie
+## Configuration
 
-1. Ga naar **Instellingen → Apparaten & Diensten → Integratie toevoegen**
-2. Zoek op **RooWifi**
-3. Vul in:
-   - **IP-adres**: bijv. `192.168.178.185` (stel DHCP-reservering in voor een vast IP)
-   - **Gebruikersnaam**: `admin` (standaard)
-   - **Wachtwoord**: `roombawifi` (standaard)
+1. Go to **Settings → Devices & Services → Add integration**
+2. Search for **RooWifi**
+3. Enter:
+   - **IP address**: e.g. `192.168.1.50` (set a DHCP reservation for a stable IP)
+   - **Username**: `admin` (default)
+   - **Password**: `roombawifi` (default)
 
-## Entiteiten
+## Entities
 
-### Stofzuiger
-| Entiteit | Beschrijving |
+### Vacuum
+| Entity | Description |
 |---|---|
-| `vacuum.roomba` | Hoofdentiteit — start, pauze, stop, dock, spot clean |
+| `vacuum.roomba` | Main entity — start, pause, stop, return to base, spot clean |
 
-### Sensoren
-| Entiteit | Eenheid |
+### Sensors
+| Entity | Unit |
 |---|---|
 | Battery | % |
 | Battery Voltage | V |
-| Battery Current | mA (negatief = ontladen) |
+| Battery Current | mA (negative = discharging) |
 | Battery Temperature | °C |
-| Charging State | tekst |
-| Distance | mm (cumulatief per sessie) |
-| Angle | ° (cumulatief per sessie) |
+| Charging State | text |
+| Distance | mm (cumulative per session) |
+| Angle | ° (cumulative per session) |
 
-### Binary sensoren
-Bumper links/rechts, wieldrop links/rechts, cliff links/front-links/front-rechts/rechts, virtual wall, wall sensor, dirt detect.
+### Binary sensors
+Bumper left/right, wheel drop left/right, cliff left/front-left/front-right/right, virtual wall, wall sensor, dirt detect.
 
-## Opmerkingen
+## Notes
 
-- Polling interval: **15 seconden** (conform RooWifi aanbeveling, max 2 gelijktijdige verbindingen)
-- Een slapende Roomba wordt automatisch gewekt voor elk commando via opcode 128
-- De OI-modus (passive/safe/full) is niet beschikbaar via de JSON API; de vacuümstatus wordt bijgehouden op basis van interne toestand en laadstatus
-- RooWifi ondersteunt alleen 802.11b — zorg dat je router legacy 802.11b toestaat
+- Polling interval: **15 seconds** (per RooWifi recommendation; max 2 simultaneous connections)
+- A sleeping Roomba is automatically woken via opcode 128 before each command
+- The OI mode (passive/safe/full) is not available via the JSON API; vacuum state is tracked internally based on issued commands and charging status
+- RooWifi supports 802.11b only — make sure your router allows legacy 802.11b clients
 
-## Licentie
+## License
 
 MIT

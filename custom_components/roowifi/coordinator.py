@@ -37,7 +37,7 @@ class RoowifiDataUpdateCoordinator(DataUpdateCoordinator):
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": "Roomba",
             "manufacturer": "iRobot",
-            "model": "Roomba 600-serie (RooWifi)",
+            "model": "Roomba 600 series (RooWifi)",
         }
 
     async def _async_update_data(self) -> dict:
