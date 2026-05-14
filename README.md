@@ -2,10 +2,13 @@
 
 HACS custom integration for the **RooWifi Wi-Fi module** (Carnlan Engineering, ~2013) to control older iRobot Roomba vacuums (500/600/700 series) via Home Assistant.
 
+> **RooWifi** is a Wi-Fi adapter for the iRobot Roomba developed by Carnlan Engineering.
+> Official website: [www.roowifi.com](http://www.roowifi.com)
+
 ## Hardware requirements
 
 - iRobot Roomba 500/600/700 series with mini-DIN 7-pin (PS/2) SCI port
-- [RooWifi module](http://www.roowifi.com/) connected to the SCI port
+- [RooWifi Wi-Fi module](http://www.roowifi.com) connected to the SCI port
 - RooWifi connected to your home network (LED blinks every 3 seconds)
 
 ## Installation via HACS
@@ -21,8 +24,8 @@ HACS custom integration for the **RooWifi Wi-Fi module** (Carnlan Engineering, ~
 2. Search for **RooWifi**
 3. Enter:
    - **IP address**: e.g. `192.168.1.50` (set a DHCP reservation for a stable IP)
-   - **Username**: `admin` (default)
-   - **Password**: `roombawifi` (default)
+   - **Username**: `admin` (default, configurable at [http://&lt;roowifi-ip&gt;/](http://www.roowifi.com))
+   - **Password**: `roombawifi` (default, configurable at [http://&lt;roowifi-ip&gt;/](http://www.roowifi.com))
 
 ## Entities
 
@@ -45,12 +48,27 @@ HACS custom integration for the **RooWifi Wi-Fi module** (Carnlan Engineering, ~
 ### Binary sensors
 Bumper left/right, wheel drop left/right, cliff left/front-left/front-right/right, virtual wall, wall sensor, dirt detect.
 
+### Buttons (manual control)
+| Button | Action |
+|---|---|
+| Move Forward | Drive forward for 0.8 s |
+| Move Backward | Drive backward for 0.8 s |
+| Spin Left / Right | Spin ~90° in place |
+| Stop Driving | Halt motion immediately |
+| Cleaning Motors On/Off | Toggle brushes and vacuum motor |
+
 ## Notes
 
 - Polling interval: **15 seconds** (per RooWifi recommendation; max 2 simultaneous connections)
 - A sleeping Roomba is automatically woken via opcode 128 before each command
 - The OI mode (passive/safe/full) is not available via the JSON API; vacuum state is tracked internally based on issued commands and charging status
 - RooWifi supports 802.11b only — make sure your router allows legacy 802.11b clients
+- The RooWifi module can be configured via its built-in web interface at `http://<roowifi-ip>/`. See [www.roowifi.com](http://www.roowifi.com) for documentation
+
+## References
+
+- [RooWifi official website](http://www.roowifi.com)
+- [iRobot Open Interface Specification](http://www.irobot.com/images/consumer/hacker/roomba_sci_spec_manual.pdf)
 
 ## License
 
