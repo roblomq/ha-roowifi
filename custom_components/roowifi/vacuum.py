@@ -6,6 +6,7 @@ import logging
 from homeassistant.components.vacuum import StateVacuumEntity, VacuumEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -78,10 +79,16 @@ class RoowifiVacuum(CoordinatorEntity[RoowifiDataUpdateCoordinator], StateVacuum
             _LOGGER.error("Roomba command failed: %s", err)
             self._internal_state = prev
             self.async_write_ha_state()
-            return
+            raise HomeAssistantError(str(err)) from err
         await self.coordinator.async_refresh()
 
     async def async_start(self) -> None:
+        if self.state == _STATE_DOCKED:
+            _LOGGER.debug(
+                "Start requested while docked — sending wake signal. "
+                "If the Roomba has been docked for a long time (deep sleep), "
+                "press the physical CLEAN button first."
+            )
         await self._send(_STATE_CLEANING, self.coordinator.client.async_start_clean())
 
     async def async_pause(self) -> None:

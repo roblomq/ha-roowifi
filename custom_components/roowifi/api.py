@@ -193,29 +193,11 @@ class RoowifiClient:
             )
 
     async def async_start_clean(self) -> None:
-        # Wake via TCP: the RooWifi pulses the BRC pin when it detects a TCP
-        # connection + wake-up byte (opcode 128). Deep sleep needs several
-        # seconds to fully boot the OI, so we hold the connection open and
-        # send opcode 128 repeatedly before closing and issuing CLEAN.
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self._host, 9001),
-                timeout=3.0,
-            )
-            try:
-                for _ in range(3):
-                    writer.write(bytes([128]))
-                    await writer.drain()
-                    await asyncio.sleep(1.0)
-            finally:
-                writer.close()
-                try:
-                    await writer.wait_closed()
-                except Exception:
-                    pass
-        except (OSError, asyncio.TimeoutError) as err:
-            raise CannotConnect(f"TCP gateway unreachable: {err}") from err
-
+        # Send opcode 128 via TCP to attempt a wake from light sleep.
+        # Note: deep sleep (after extended docking) cannot be broken via
+        # the RooWifi serial interface — the user must press the physical
+        # CLEAN button on the robot first.
+        await self._tcp_send(bytes([128]))
         await asyncio.sleep(0.5)
         await self._button("CLEAN")
 
