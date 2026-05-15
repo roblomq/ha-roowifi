@@ -193,10 +193,12 @@ class RoowifiClient:
             )
 
     async def async_start_clean(self) -> None:
-        # Opcode 128 returns the Roomba to Passive mode (exits Safe/Full mode,
-        # wakes from sleep). Required before CLEAN works reliably from dock.
-        await self.async_send_opcode(128)
-        await asyncio.sleep(0.5)
+        # Wake via TCP: opening port 9001 activates the RooWifi serial port,
+        # and opcode 128 wakes the Roomba from deep sleep on the dock.
+        # HTTP-based wake (/rwr.cgi?exec=128) does not work when the Roomba
+        # is in deep sleep because the serial port is inactive.
+        await self._tcp_send(bytes([128]))
+        await asyncio.sleep(1.0)
         await self._button("CLEAN")
 
     async def async_clean_spot(self) -> None:
