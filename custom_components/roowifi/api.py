@@ -193,12 +193,30 @@ class RoowifiClient:
             )
 
     async def async_start_clean(self) -> None:
-        # Wake via TCP: opening port 9001 activates the RooWifi serial port,
-        # and opcode 128 wakes the Roomba from deep sleep on the dock.
-        # HTTP-based wake (/rwr.cgi?exec=128) does not work when the Roomba
-        # is in deep sleep because the serial port is inactive.
-        await self._tcp_send(bytes([128]))
-        await asyncio.sleep(1.0)
+        # Wake via TCP: the RooWifi pulses the BRC pin when it detects a TCP
+        # connection + wake-up byte (opcode 128). Deep sleep needs several
+        # seconds to fully boot the OI, so we hold the connection open and
+        # send opcode 128 repeatedly before closing and issuing CLEAN.
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, 9001),
+                timeout=3.0,
+            )
+            try:
+                for _ in range(3):
+                    writer.write(bytes([128]))
+                    await writer.drain()
+                    await asyncio.sleep(1.0)
+            finally:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+        except (OSError, asyncio.TimeoutError) as err:
+            raise CannotConnect(f"TCP gateway unreachable: {err}") from err
+
+        await asyncio.sleep(0.5)
         await self._button("CLEAN")
 
     async def async_clean_spot(self) -> None:
