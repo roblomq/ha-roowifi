@@ -20,9 +20,11 @@ _LOGGER = logging.getLogger(__name__)
 # is sleeping on the dock and the RooWifi responds slowly or not at all).
 _MAX_FAILURES = 3
 
-# Send a wake byte every 3 minutes while docked to prevent the Roomba from
-# entering deep sleep, which makes it unresponsive to remote commands.
-_KEEP_ALIVE_INTERVAL = timedelta(minutes=3)
+# Send a keep-alive sequence every minute while docked. The Roomba 600 series
+# can enter deep sleep based on battery state (full charge), so a short interval
+# and an active OI sequence (Passive → Safe → Passive) is needed to keep the
+# serial port responsive.
+_KEEP_ALIVE_INTERVAL = timedelta(minutes=1)
 
 
 class RoowifiDataUpdateCoordinator(DataUpdateCoordinator):
@@ -68,14 +70,22 @@ class RoowifiDataUpdateCoordinator(DataUpdateCoordinator):
             self._keep_alive_unsub = None
 
     async def _async_keep_alive(self, _now=None) -> None:
-        """Send opcode 128 via TCP while docked to reset the OI sleep timer."""
+        """Send an OI wake sequence via TCP while docked to prevent deep sleep.
+
+        Passive → Safe → Passive exercises the OI more than a single byte and
+        is more likely to keep the Roomba's serial port active when fully charged.
+        """
         if not self.data:
             return
         charging_state = int((self.data.get("r14") or {}).get("value", 0))
         if charging_state == 0:
             return  # Not docked — don't interfere with cleaning or driving
         try:
-            await self.client._tcp_send(bytes([128]))
+            await self.client._tcp_send(
+                bytes([128]),   # Passive mode (wake)
+                bytes([131]),   # Safe mode
+                bytes([128]),   # Back to Passive
+            )
             _LOGGER.debug("Keep-alive sent (charging state: %d)", charging_state)
         except Exception as err:
             _LOGGER.debug("Keep-alive failed (non-critical): %s", err)
